@@ -1,57 +1,88 @@
 import 'dotenv/config';
-import { MongoClient } from 'mongodb';
+import { MongoClient, ObjectId } from 'mongodb';
 import cors from 'cors';
 import express from 'express';
-import multer from 'multer'; // ১. Multer ইমপোর্ট করুন
+import multer from 'multer';
+import path from 'path';
 
 const app = express();
 const PORT = 8000;
 
 app.use(cors());
-app.use(express.json()); // JSON ডেটা রিড করার জন্য
-app.use(express.urlencoded({ extended: true })); // ফর্মের সাধারণ ডেটা রিড করার জন্য
+// JSON এবং URL-encoded ডেটার লিমিট বাড়িয়ে দিন যাতে বড় টেক্সট বা ডেটা নিতে পারে
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// ২. Multer স্টোরেজ সেটআপ (মেমোরিতে ফাইল সাময়িকভাবে রাখার জন্য)
-const upload = multer({ storage: multer.memoryStorage() });
+// ফিজিক্যাল ফোল্ডারে ফাইল সেভ করার জন্য diskStorage
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'uploads/'); // প্রজেক্ট রুটে 'uploads' ফোল্ডার থাকতে হবে
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, uniqueSuffix + '-' + file.originalname);
+  }
+});
+
+const upload = multer({ storage: storage });
+
+// uploads ফোল্ডারটিকে পাবলিকলি স্ট্যাटिक করে দেওয়া
+app.use('/uploads', express.static(path.join(path.resolve(), 'uploads')));
 
 const client = new MongoClient(process.env.MONGODB_URI);
 
-export async function connectToMongoDB() {
+async function connectToMongoDB() {
   try {
     await client.connect();
-    console.log("You successfully connected to MongoDB!");
+    console.log("Connected to MongoDB!");
     return client;
   } catch (err) {
     console.dir(err);
   }
 }
 
-
-const mongoClient= await connectToMongoDB();
-
+const mongoClient = await connectToMongoDB();
 const db = mongoClient.db("studiospace");
-const addStudioCollection = db.collection("addstudio")
-
-
+const addStudioCollection = db.collection("addstudio");
 
 app.get('/', (req, res) => {
   res.send({ message: 'Server is running fine' });
 });
 
-// ৩. এখানে upload.array('images') মিডলওয়্যারটি বসাতে হবে
-app.post('/add_studio', upload.array('images'),async (req, res) => {
+// /add_studio রাউট (FormData এবং Multer দিয়ে হ্যান্ডেল করা)
+app.post('/add_studio', upload.array('image', 10), async (req, res) => {
+  try {
+    const data = req.body;
+    
+    if (req.files && req.files.length > 0) {
+      data.images = req.files.map(file => ({
+        filename: file.filename,
+        url: `/uploads/${file.filename}` // লোকাল পাথ সেভ হবে
+      }));
+    }
 
-  const data =req.body
-
-  const result = await addStudioCollection.insertOne(data)
-
-    console.log(result);
-    console.log("Text Form Data (req.body):", data); // এখানে আর undefined দেখাবে না, সব টেক্সট ডেটা দেখাবে
-    console.log("Uploaded Images (req.files):", req.files); // এখানে ইমেজগুলোর তথ্য দেখাবে
-
-    res.status(200).json( result);
+    const result = await addStudioCollection.insertOne(data);
+    res.status(200).json({ success: true, result, message: "Studio added successfully!" });
+  } catch (error) {
+    console.error("Error saving studio:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
+app.get('/exploreStudios', async (req, res) => {
+  const result = await addStudioCollection.find().toArray();
+  res.send(result);
+});
+
+
+// single details page api
+
+app.get('/exploreStudios/:id',async(req,res)=>{
+  const {id} = req.params
+  const result =await addStudioCollection.findOne({_id : new ObjectId(id)})
+
+  res.send(result)
+})
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
