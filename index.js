@@ -84,6 +84,18 @@ app.get('/exploreStudios/:id',async(req,res)=>{
   res.send(result)
 })
 
+// Edit api
+app.patch('/exploreStudios/:id',async(req,res)=>{
+
+  const {id} = req.params
+  const updateData = req.body
+  const result =await addStudioCollection.updateOne(
+    {_id:new ObjectId(id)},
+    {$set:updateData}
+  )
+res.json(result)
+})
+
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
