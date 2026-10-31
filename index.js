@@ -96,6 +96,16 @@ app.patch('/exploreStudios/:id',async(req,res)=>{
 res.json(result)
 })
 
+
+// Delete Api
+app.delete('/exploreStudios/:id',async(req,res)=>{
+const {id} =req.params
+const result=await addStudioCollection.deleteOne({_id:new ObjectId(id)})
+res.json(result)
+})
+
+
+
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
