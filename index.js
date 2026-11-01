@@ -44,6 +44,7 @@ async function connectToMongoDB() {
 const mongoClient = await connectToMongoDB();
 const db = mongoClient.db("studiospace");
 const addStudioCollection = db.collection("addstudio");
+const bookingCollection = db.collection("booking");
 
 app.get('/', (req, res) => {
   res.send({ message: 'Server is running fine' });
@@ -104,6 +105,30 @@ const result=await addStudioCollection.deleteOne({_id:new ObjectId(id)})
 res.json(result)
 })
 
+
+
+// Booking api
+app.post('/booking', async (req, res) => {
+  try {
+    const bookingData = req.body;
+    const result = await bookingCollection.insertOne(bookingData);
+    res.status(200).json({ success: true, result, message: "Booking created successfully!" });
+  } catch (error) {
+    console.error("Error creating booking:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get("/my-bookings/:email", async (req, res) => {
+  const { email } = req.params;
+
+  const result = await bookingCollection
+    .find({ userEmail: email })
+    .toArray();
+
+  res.send(result);
+});
+// http://localhost:8000/my-bookings
 
 
 app.listen(PORT, () => {
