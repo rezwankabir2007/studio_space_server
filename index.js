@@ -9,7 +9,7 @@ const app = express();
 const PORT = 8000;
 
 app.use(cors());
-// JSON এবং URL-encoded ডেটার লিমিট বাড়িয়ে দিন যাতে বড় টেক্সট বা ডেটা নিতে পারে
+// JSON এবং URL-encoded ডেটার লিমিট বাড়িয়ে দেওয়া যাতে বড় টেক্সট বা ডেটা নিতে পারে
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
@@ -26,7 +26,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
-// uploads ফোল্ডারটিকে পাবলিকলি স্ট্যাटिक করে দেওয়া
+// uploads ফোল্ডারটিকে পাবলিকলি স্ট্যাটিক করে দেওয়া
 app.use('/uploads', express.static(path.join(path.resolve(), 'uploads')));
 
 const client = new MongoClient(process.env.MONGODB_URI);
@@ -58,7 +58,7 @@ app.post('/add_studio', upload.array('image', 10), async (req, res) => {
     if (req.files && req.files.length > 0) {
       data.images = req.files.map(file => ({
         filename: file.filename,
-        url: `/uploads/${file.filename}` // লোকাল পাথ সেভ হবে
+        url: `http://localhost:${PORT}/uploads/${file.filename}` // Full URL যাতে frontend-e image load a problem na hoy
       }));
     }
 
@@ -75,37 +75,45 @@ app.get('/exploreStudios', async (req, res) => {
   res.send(result);
 });
 
+// প্রোফাইল পেজের জন্য ইমেইল দিয়ে স্টুডিও ফেচ করার রাউট
+app.get('/studios', async (req, res) => {
+  try {
+    const { email } = req.query;
+    let query = {};
+    if (email) {
+      query = { hostEmail: email };
+    }
+    const result = await addStudioCollection.find(query).toArray();
+    res.send(result);
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 
 // single details page api
-
-app.get('/exploreStudios/:id',async(req,res)=>{
-  const {id} = req.params
-  const result =await addStudioCollection.findOne({_id : new ObjectId(id)})
-
-  res.send(result)
-})
+app.get('/exploreStudios/:id', async (req, res) => {
+  const { id } = req.params;
+  const result = await addStudioCollection.findOne({ _id: new ObjectId(id) });
+  res.send(result);
+});
 
 // Edit api
-app.patch('/exploreStudios/:id',async(req,res)=>{
-
-  const {id} = req.params
-  const updateData = req.body
-  const result =await addStudioCollection.updateOne(
-    {_id:new ObjectId(id)},
-    {$set:updateData}
-  )
-res.json(result)
-})
-
+app.patch('/exploreStudios/:id', async (req, res) => {
+  const { id } = req.params;
+  const updateData = req.body;
+  const result = await addStudioCollection.updateOne(
+    { _id: new ObjectId(id) },
+    { $set: updateData }
+  );
+  res.json(result);
+});
 
 // Delete Api
-app.delete('/exploreStudios/:id',async(req,res)=>{
-const {id} =req.params
-const result=await addStudioCollection.deleteOne({_id:new ObjectId(id)})
-res.json(result)
-})
-
-
+app.delete('/exploreStudios/:id', async (req, res) => {
+  const { id } = req.params;
+  const result = await addStudioCollection.deleteOne({ _id: new ObjectId(id) });
+  res.json(result);
+});
 
 // Booking api
 app.post('/booking', async (req, res) => {
@@ -121,15 +129,43 @@ app.post('/booking', async (req, res) => {
 
 app.get("/my-bookings/:email", async (req, res) => {
   const { email } = req.params;
-
   const result = await bookingCollection
     .find({ userEmail: email })
     .toArray();
-
   res.send(result);
 });
-// http://localhost:8000/my-bookings
 
+app.delete("/booking/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).send({
+        message: "Invalid booking ID",
+      });
+    }
+
+    const result = await bookingCollection.deleteOne({
+      _id: new ObjectId(id),
+    });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).send({
+        message: "Booking not found",
+      });
+    }
+
+    res.send({
+      message: "Booking deleted successfully",
+      result,
+    });
+
+  } catch (error) {
+    res.status(500).send({
+      message: "Something went wrong",
+    });
+  }
+});
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
