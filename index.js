@@ -9,7 +9,8 @@ const app = express();
 const PORT = 8000;
 
 app.use(cors());
-// JSON ডেটার লিমিট বাড়িয়ে দেওয়া যাতে বড় Base64 ইমেজ সহজে নিতে পারে
+
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
@@ -27,13 +28,14 @@ const verifyApi = async (req, res, next) => {
       return res.status(401).json({ message: "Unauthorized access" });
     }
 
-    const JWKS = createRemoteJWKSet(new URL('http://localhost:3000/api/auth/jwks'));
+    const JWKS = createRemoteJWKSet(new URL(`${process.env.CLIENT_URL}/api/auth/jwks`));
 
     const { payload } = await jwtVerify(token, JWKS);
 
     console.log("Token payload:", payload);
     
-    // চাইলে পরবর্তী রাউটে ব্যবহার করার জন্য রিকোয়েস্টে পেলেলোড যুক্ত করে দিতে পারেন
+    
+    
     req.user = payload; 
 
     next();
@@ -43,7 +45,8 @@ const verifyApi = async (req, res, next) => {
   }
 };
 
-// স্ট্যাটিক ফোল্ডার (যদি অন্য কোনো ফাইলের জন্য লাগে)
+
+
 app.use('/uploads', express.static(path.join(path.resolve(), 'uploads')));
 
 const client = new MongoClient(process.env.MONGODB_URI);
@@ -67,12 +70,13 @@ app.get('/', (req, res) => {
   res.send({ message: 'Server is running fine' });
 });
 
-// Add Studio API (ফ্রন্টএন্ড থেকে পাঠানো JSON এবং Base64 ইমেজ রিসিভ করবে)
+
+
 app.post('/add_studio', verifyApi, async (req, res) => {
   try {
     const data = req.body;
     
-    // ডাটা সরাসরি MongoDB তে সেভ করা হচ্ছে
+    
     const result = await addStudioCollection.insertOne(data);
     res.status(200).json({ success: true, result, message: "Studio added successfully!" });
   } catch (error) {
@@ -86,7 +90,8 @@ app.get('/exploreStudios', async (req, res) => {
   res.send(result);
 });
 
-// প্রোফাইল পেজের জন্য ইমেইল দিয়ে স্টুডিও ফেচ করার রাউট
+
+
 app.get('/studios', async (req, res) => {
   try {
     const { email } = req.query;
@@ -196,3 +201,5 @@ app.delete("/booking/:id", verifyApi, async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
+
+export default app;
