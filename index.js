@@ -3,6 +3,7 @@ import { MongoClient, ObjectId } from 'mongodb';
 import cors from 'cors';
 import express from 'express';
 import path from 'path';
+import { createRemoteJWKSet, jwtVerify } from 'jose'; // <-- এখানে jwtVerify যোগ করা হয়েছে
 
 const app = express();
 const PORT = 8000;
@@ -12,16 +13,34 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// ব্যাকএন্ড সিকিউরিটি মিডলওয়্যার (Bearer Token চেক করার জন্য)
-const verifyApi = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({ message: "Unauthorized access" });
-  }
+// ব্যাকএন্ড সিকিউরিটি মিডলওয়্যার (সংশোধিত ও নিরাপদ)
+const verifyApi = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ message: "Unauthorized access" });
+    }
 
-  // এখানে চাইলে টোকেন ডিকোড বা ভেরিফাই করতে পারেন
-  next();
+    const token = authHeader.split(" ")[1];
+    if (!token) {
+      return res.status(401).json({ message: "Unauthorized access" });
+    }
+
+    const JWKS = createRemoteJWKSet(new URL('http://localhost:3000/api/auth/jwks'));
+
+    const { payload } = await jwtVerify(token, JWKS);
+
+    console.log("Token payload:", payload);
+    
+    // চাইলে পরবর্তী রাউটে ব্যবহার করার জন্য রিকোয়েস্টে পেলেলোড যুক্ত করে দিতে পারেন
+    req.user = payload; 
+
+    next();
+  } catch (error) {
+    console.error("JWT Verification Error:", error.message);
+    return res.status(401).json({ message: "Invalid or expired token" });
+  }
 };
 
 // স্ট্যাটিক ফোল্ডার (যদি অন্য কোনো ফাইলের জন্য লাগে)
@@ -82,11 +101,36 @@ app.get('/studios', async (req, res) => {
   }
 });
 
-// single details page api
-app.get('/exploreStudios/:id', verifyApi, async (req, res) => {
-  const { id } = req.params;
-  const result = await addStudioCollection.findOne({ _id: new ObjectId(id) });
-  res.send(result);
+// Single Studio Details API
+app.get('/exploreStudios/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({
+        message: "Invalid Studio ID"
+      });
+    }
+
+    const result = await addStudioCollection.findOne({
+      _id: new ObjectId(id)
+    });
+
+    if (!result) {
+      return res.status(404).json({
+        message: "Studio not found"
+      });
+    }
+
+    res.status(200).json(result);
+
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      message: "Failed to fetch studio"
+    });
+  }
 });
 
 // Edit api
@@ -119,7 +163,7 @@ app.post('/booking', async (req, res) => {
   }
 });
 
-app.get("/my-bookings/:email", async (req, res) => {
+app.get("/my-bookings/:email", verifyApi, async (req, res) => {
   const { email } = req.params;
   const result = await bookingCollection
     .find({ userEmail: email })
@@ -127,10 +171,7 @@ app.get("/my-bookings/:email", async (req, res) => {
   res.send(result);
 });
 
-
-
-
-app.delete("/booking/:id", async (req, res) => {
+app.delete("/booking/:id", verifyApi, async (req, res) => {
   try {
     const { id } = req.params;
 
